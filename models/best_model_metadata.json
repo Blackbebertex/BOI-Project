@@ -1,0 +1,7 @@
+{
+  "best_model": "LightGBM",
+  "optimal_threshold": 0.01,
+  "best_roc_auc": 0.999945136411455,
+  "best_pr_auc": 0.9946398997019416,
+  "optimal_f1": 0.975609756097561
+}

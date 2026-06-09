@@ -20,6 +20,7 @@ Why Anomaly Detection?
 import os
 import warnings
 import json
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -40,6 +41,8 @@ except ImportError:
     print("[INFO] PyTorch not available. Autoencoder anomaly detection skipped.")
 
 warnings.filterwarnings('ignore')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from shared_config import MODEL_REPORTS_DIR, MODELS_DIR, load_engineered_data
 
@@ -79,7 +82,7 @@ iso_forest = IsolationForest(
     contamination   = ISOFOREST_CONTAMINATION,
     max_samples     = 'auto',
     random_state    = RANDOM_STATE,
-    n_jobs          = -1,
+    n_jobs          = 1,
 )
 iso_forest.fit(X[y == 0])  # Train ONLY on legitimate accounts (semi-supervised approach)
 iso_scores_raw = iso_forest.decision_function(X)       # Higher = more normal
@@ -102,7 +105,7 @@ print("METHOD 2: ECOD — Empirical Cumulative Outlier Detection")
 print("=" * 70)
 try:
     from pyod.models.ecod import ECOD
-    ecod = ECOD(contamination=ISOFOREST_CONTAMINATION, n_jobs=-1)
+    ecod = ECOD(contamination=ISOFOREST_CONTAMINATION, n_jobs=1)
     ecod.fit(X[y == 0])
     ecod_scores = ecod.decision_function(X)
     ecod_scores_norm = (ecod_scores - ecod_scores.min()) / (ecod_scores.max() - ecod_scores.min())

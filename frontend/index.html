@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOI Mule Account Detection Terminal</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #0a0f24;
+      --bg-card: rgba(19, 27, 61, 0.75);
+      --bg-card-hover: rgba(28, 38, 82, 0.85);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      
+      --primary: #00f2fe;
+      --primary-hover: #4facfe;
+      
+      --color-approve: #00e676;
+      --color-review: #ffb300;
+      --color-challenge: #ff9100;
+      --color-block: #ff5252;
+      
+      --color-shap-pos: #ff5252;
+      --color-shap-neg: #00f2fe;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 10% 20%, rgba(0, 242, 254, 0.05) 0px, transparent 50%),
+        radial-gradient(at 90% 80%, rgba(79, 172, 254, 0.05) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* --- HEADER --- */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.5rem 1rem;
+      border-radius: 50px;
+      border: 1px solid var(--border-color);
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--color-approve);
+      box-shadow: 0 0 10px var(--color-approve);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    /* --- NAV TABS --- */
+    .nav-tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .tab-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .tab-btn:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      color: var(--bg-dark);
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.3);
+    }
+
+    /* --- TAB CONTENTS --- */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* --- DASHBOARD GRID --- */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 1fr 450px;
+      gap: 2rem;
+    }
+
+    @media (max-width: 1100px) {
+      .dashboard-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .glass-card:hover {
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 0.75rem;
+    }
+
+    /* --- STATS GRID --- */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Colors for stats */
+    .stat-approved { color: var(--color-approve); }
+    .stat-reviewed { color: var(--color-review); }
+    .stat-challenged { color: var(--color-challenge); }
+    .stat-blocked { color: var(--color-block); }
+
+    /* --- DRAG & DROP ZONE --- */
+    .upload-zone {
+      border: 2px dashed rgba(0, 242, 254, 0.3);
+      border-radius: 12px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(0, 242, 254, 0.01);
+      transition: all 0.3s ease;
+      margin-bottom: 1.5rem;
+    }
+
+    .upload-zone:hover {
+      background: rgba(0, 242, 254, 0.03);
+      border-color: var(--primary);
+    }
+
+    .upload-zone svg {
+      width: 48px;
+      height: 48px;
+      fill: var(--primary);
+      margin-bottom: 1rem;
+      opacity: 0.8;
+    }
+
+    .upload-zone p {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .upload-zone span {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* --- QUICK DEMO DATA --- */
+    .demo-data-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+    }
+
+    .demo-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--text-muted);
+    }
+
+    /* --- TABLE AND CONTROLS --- */
+    .table-controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input, .filter-select {
+      background: rgba(10, 15, 36, 0.8);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .filter-select {
+      min-width: 150px;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    tbody tr.selected {
+      background: rgba(0, 242, 254, 0.08);
+      border-left: 3px solid var(--primary);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-approve { background: rgba(0, 230, 118, 0.15); color: var(--color-approve); }
+    .badge-review { background: rgba(255, 179, 0, 0.15); color: var(--color-review); }
+    .badge-challenge { background: rgba(255, 145, 0, 0.15); color: var(--color-challenge); }
+    .badge-block { background: rgba(255, 82, 82, 0.15); color: var(--color-block); }
+    .badge-override { box-shadow: inset 0 0 0 1px rgba(0, 242, 254, 0.55); }
+
+    /* --- PAGINATION --- */
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* --- SHAP VISUALIZATION --- */
+    .shap-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .shap-sub {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+
+    .shap-waterfall {
+      margin-top: 1.5rem;
+    }
+
+    .shap-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.85rem;
+      font-size: 0.85rem;
+    }
+
+    .shap-feature-name {
+      width: 120px;
+      color: var(--text-muted);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .shap-feature-val {
+      width: 65px;
+      text-align: right;
+      color: var(--text-main);
+      padding-right: 0.75rem;
+      font-family: monospace;
+    }
+
+    .shap-bar-container {
+      flex: 1;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      position: relative;
+      border-radius: 3px;
+    }
+
+    .shap-center-line {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.25);
+      z-index: 2;
+    }
+
+    .shap-bar {
+      height: 100%;
+      position: absolute;
+      border-radius: 2px;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .shap-bar.positive {
+      background: linear-gradient(90deg, rgba(255, 82, 82, 0.6) 0%, var(--color-shap-pos) 100%);
+      left: 50%;
+    }
+
+    .shap-bar.negative {
+      background: linear-gradient(270deg, rgba(0, 242, 254, 0.6) 0%, var(--color-shap-neg) 100%);
+      right: 50%;
+    }
+
+    .shap-value-text {
+      width: 60px;
+      text-align: right;
+      font-weight: 600;
+      font-family: monospace;
+    }
+
+    .shap-value-text.positive { color: var(--color-shap-pos); }
+    .shap-value-text.negative { color: var(--color-shap-neg); }
+
+    .shap-legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+    }
+
+    .legend-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .legend-pos { background-color: var(--color-shap-pos); }
+    .legend-neg { background-color: var(--color-shap-neg); }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      background: rgba(255, 255, 255, 0.01);
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .info-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .info-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    /* --- SINGLE ACCOUNT SCORING PANEL --- */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-group input {
+      background: rgba(10, 15, 36, 0.8);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      outline: none;
+      font-size: 0.9rem;
+      transition: border-color 0.2s ease;
+    }
+
+    .form-group input:focus {
+      border-color: var(--primary);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      color: var(--bg-dark);
+      border: none;
+      padding: 0.85rem 2rem;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      fill: var(--text-muted);
+      opacity: 0.4;
+      margin-bottom: 1rem;
+    }
+
+    /* Hide element */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- HEADER -->
+  <header>
+    <div>
+      <h1>BOI Mule Account Detection Terminal</h1>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+        Supervised LightGBM + Isolation Forest Anomaly Detection Engine
+      </p>
+    </div>
+    <div class="system-status">
+      <div class="status-dot" id="systemStatusDot"></div>
+      <span id="systemStatusText">Connecting to engine...</span>
+    </div>
+  </header>
+
+  <!-- NAVIGATION TABS -->
+  <nav class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('batch-tab')">Batch Operations & CSV Upload</button>
+    <button class="tab-btn" onclick="switchTab('single-tab')">Single Transaction Terminal</button>
+  </nav>
+
+  <!-- BATCH TAB CONTENT -->
+  <div id="batch-tab" class="tab-content active">
+    <div class="dashboard-layout">
+      
+      <!-- LEFT HAND PANEL: UPLOAD AND RESULTS TABLE -->
+      <div>
+        
+        <!-- DRAG AND DROP ZONE -->
+        <div class="glass-card">
+          <div class="card-title">Upload Transaction CSV</div>
+          
+          <div class="upload-zone" id="dropZone" onclick="document.getElementById('csvFileInput').click()">
+            <svg viewBox="0 0 24 24">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <p>Drag and drop your transaction CSV file here or <span>browse files</span></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.7;">Supports the full engineered CSV. If your file contains all model features, every available column will be scored automatically.</p>
+            <p style="font-size: 0.8rem; margin-top: 0.35rem; opacity: 0.7;">Batch uploads support up to 2 lakh entries.</p>
+            <input type="file" id="csvFileInput" class="hidden" accept=".csv" onchange="handleFileSelect(event)">
+          </div>
+
+          <div class="demo-data-panel">
+            <span class="demo-label">Load Quick Demo Batch:</span>
+            <button class="btn-secondary" onclick="loadDemoDataset('legitimate')">Legitimate Customers</button>
+            <button class="btn-secondary" onclick="loadDemoDataset('mules')">High-Risk Mules</button>
+            <button class="btn-secondary" onclick="loadDemoDataset('mixed')">Mixed Batch (Randomized)</button>
+          </div>
+
+          <div class="demo-data-panel" style="margin-top: 0.9rem; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <span class="demo-label">Decision Policy:</span>
+            <select id="decisionModeSelect" class="filter-select" style="min-width: 140px;">
+              <option value="strict">Stricter</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="loose">Looser</option>
+            </select>
+            <button class="btn-secondary" onclick="applyDecisionPolicy()">Apply Policy</button>
+          </div>
+          <div id="policyStatus" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+            Current policy: balanced
+          </div>
+        </div>
+
+        <!-- BATCH SUMMARY METRICS -->
+        <div class="glass-card hidden" id="summaryCard">
+          <div class="card-title">Batch Scoring Analytics</div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total Scored</div>
+              <div class="stat-value" id="statTotal">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Approved</div>
+              <div class="stat-value stat-approved" id="statApproved">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Reviewed</div>
+              <div class="stat-value stat-reviewed" id="statReviewed">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Challenged</div>
+              <div class="stat-value stat-challenged" id="statChallenged">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Blocked</div>
+              <div class="stat-value stat-blocked" id="statBlocked">-</div>
+            </div>
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+            <span id="statLatency">Batch Latency: -</span>
+            <span id="statEngine">Model: -</span>
+          </div>
+        </div>
+
+        <!-- RESULTS GRID CARD -->
+        <div class="glass-card">
+          <div class="card-title">Scored Transactions Grid</div>
+          
+          <div class="table-controls">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search by Account ID..." oninput="applyFilters()">
+            <select id="decisionFilter" class="filter-select" onchange="applyFilters()">
+              <option value="">All Decisions</option>
+              <option value="APPROVE">Approved</option>
+              <option value="REVIEW">Review Needed</option>
+              <option value="CHALLENGE">Challenge Required</option>
+              <option value="BLOCK">Blocked</option>
+            </select>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th onclick="sortTable('account_id')">Account ID</th>
+                  <th onclick="sortTable('risk_score')">Supervised Score</th>
+                  <th onclick="sortTable('anomaly_score')">Anomaly Score</th>
+                  <th onclick="sortTable('fused_risk_score')">Fused Score</th>
+                  <th onclick="sortTable('decision')">Decision</th>
+                </tr>
+              </thead>
+              <tbody id="resultsTableBody">
+                <tr>
+                  <td colspan="5" class="empty-state">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    <p>No transaction batch has been scored yet. Upload a CSV or load a quick demo batch to begin.</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="paginationInfo">Showing 0 of 0 accounts</span>
+            <div class="pagination-buttons">
+              <button class="btn-secondary" onclick="changePage(-1)" id="prevPageBtn" disabled>Previous</button>
+              <button class="btn-secondary" onclick="changePage(1)" id="nextPageBtn" disabled>Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT HAND PANEL: SHAP DETAILS VIEW -->
+      <div>
+        <div class="glass-card" style="position: sticky; top: 2rem;">
+          <div class="card-title">SHAP Feature Explainer</div>
+          
+          <!-- EMPTY STATE FOR EXPLAINER -->
+          <div id="shapEmptyState" class="empty-state">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+            <p>Select any scored account from the grid to display its live SHAP explanation chart.</p>
+          </div>
+
+          <!-- DETAILED EXPLANATION PANEL -->
+          <div id="shapDetailsPanel" class="hidden">
+            <div class="shap-header">
+              <h3 id="explainAccountId" style="font-family: 'Outfit', sans-serif; font-size: 1.4rem;">ACCOUNT: -</h3>
+              <div class="shap-sub">Visualizing feature contribution to final risk score decision.</div>
+            </div>
+
+            <div class="info-grid">
+              <div>
+                <span class="info-label">Fused Risk Score</span>
+                <div class="info-value" id="explainFusedScore" style="font-size: 1.2rem;">0.00%</div>
+              </div>
+              <div>
+                <span class="info-label">Decision</span>
+                <div class="info-value" id="explainDecision">-</div>
+              </div>
+              <div style="margin-top: 0.5rem;">
+                <span class="info-label">Supervised Prob</span>
+                <div class="info-value" id="explainSupervised">-</div>
+              </div>
+              <div style="margin-top: 0.5rem;">
+                <span class="info-label">Anomaly Score</span>
+                <div class="info-value" id="explainAnomaly">-</div>
+              </div>
+            </div>
+
+            <div class="glass-card" style="padding: 0.9rem; margin-top: 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);">
+              <div class="card-title" style="margin-bottom: 0.75rem; font-size: 0.9rem;">Manual Override</div>
+              <div style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.75rem; align-items: center;">
+                <select id="overrideDecisionSelect" class="filter-select">
+                  <option value="APPROVE">Approve</option>
+                  <option value="REVIEW" selected>Review</option>
+                  <option value="CHALLENGE">Challenge</option>
+                  <option value="BLOCK">Block</option>
+                </select>
+                <input id="overrideReasonInput" class="search-input" type="text" placeholder="Reason for override (optional)">
+                <button class="btn-secondary" onclick="applyManualOverride()">Apply Override</button>
+              </div>
+              <div id="overrideStatus" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">
+                No manual override applied.
+              </div>
+            </div>
+
+            <h4 style="font-size: 0.9rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+              Top Feature Contributions
+            </h4>
+            
+            <!-- Dynamic SHAP Rows inserted here -->
+            <div id="shapWaterfall" class="shap-waterfall"></div>
+
+            <div class="shap-legend">
+              <div class="legend-item">
+                <div class="legend-indicator legend-pos"></div>
+                <span>Increases Risk</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-indicator legend-neg"></div>
+                <span>Decreases Risk</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- SINGLE ACCOUNT TAB CONTENT -->
+  <div id="single-tab" class="tab-content">
+    <div class="glass-card">
+      <div class="card-title">Interactive Account Evaluation Terminal</div>
+      <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+        Manually adjust feature weights or inputs to simulate and test the model decisions in real-time.
+      </p>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="singleAccountId">Account ID</label>
+          <input type="text" id="singleAccountId" value="ACC-SIM-789">
+        </div>
+        <!-- 18 Required Features Inputs -->
+        <div class="form-group"><label>F115 (Txn Vol)</label><input type="number" id="feat_F115" step="0.01" value="0.12"></div>
+        <div class="form-group"><label>F321 (Foreign Txn)</label><input type="number" id="feat_F321" step="0.01" value="0.25"></div>
+        <div class="form-group"><label>F527 (Country Risk)</label><input type="number" id="feat_F527" step="0.01" value="0.05"></div>
+        <div class="form-group"><label>F531 (KYC Score)</label><input type="number" id="feat_F531" step="0.01" value="0.80"></div>
+        <div class="form-group"><label>F670 (Device Count)</label><input type="number" id="feat_F670" step="0.01" value="0.30"></div>
+        <div class="form-group"><label>F1692 (IP Risk)</label><input type="number" id="feat_F1692" step="0.01" value="0.15"></div>
+        <div class="form-group"><label>F2082 (Login Dist)</label><input type="number" id="feat_F2082" step="0.01" value="0.95"></div>
+        <div class="form-group"><label>F2122 (Velocity)</label><input type="number" id="feat_F2122" step="0.01" value="0.45"></div>
+        <div class="form-group"><label>F2582 (Failed Logins)</label><input type="number" id="feat_F2582" step="0.01" value="0.00"></div>
+        <div class="form-group"><label>F2678 (Account Age)</label><input type="number" id="feat_F2678" step="0.01" value="0.65"></div>
+        <div class="form-group"><label>F2737 (Amt Dev)</label><input type="number" id="feat_F2737" step="0.01" value="0.10"></div>
+        <div class="form-group"><label>F2956 (Cash Dep)</label><input type="number" id="feat_F2956" step="0.01" value="0.08"></div>
+        <div class="form-group"><label>F3043 (Mule Profile)</label><input type="number" id="feat_F3043" step="0.01" value="0.02"></div>
+        <div class="form-group"><label>F3836 (Trans Rate)</label><input type="number" id="feat_F3836" step="0.01" value="0.00"></div>
+        <div class="form-group"><label>F3887 (Time Offset)</label><input type="number" id="feat_F3887" step="0.01" value="0.12"></div>
+        <div class="form-group"><label>F3889 (Avg Txn Amt)</label><input type="number" id="feat_F3889" step="0.01" value="0.55"></div>
+        <div class="form-group"><label>F3891 (Max Txn Amt)</label><input type="number" id="feat_F3891" step="0.01" value="0.30"></div>
+        <div class="form-group"><label>F3894 (Card Present)</label><input type="number" id="feat_F3894" step="0.01" value="0.10"></div>
+      </div>
+
+      <button class="btn-primary" onclick="scoreSingleManual()">Evaluate & Analyze Account</button>
+    </div>
+    
+    <!-- RESULT CARD FOR MANUAL EVALUATION -->
+    <div id="manualResultCard" class="glass-card hidden">
+      <div class="card-title">Evaluation Result Details</div>
+      <div class="dashboard-layout">
+        <div>
+          <div class="info-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div style="border-right: 1px solid var(--border-color); padding-right: 10px;">
+              <span class="info-label">Decision</span>
+              <div class="info-value" id="manDecision" style="font-size: 1.1rem; text-align: left; margin-top: 5px;">-</div>
+            </div>
+            <div style="border-right: 1px solid var(--border-color); padding: 0 10px;">
+              <span class="info-label">Fused Risk</span>
+              <div class="info-value" id="manFused" style="font-size: 1.1rem; text-align: left; margin-top: 5px;">0%</div>
+            </div>
+            <div style="border-right: 1px solid var(--border-color); padding: 0 10px;">
+              <span class="info-label">Supervised</span>
+              <div class="info-value" id="manSupervised" style="font-size: 1.1rem; text-align: left; margin-top: 5px;">0%</div>
+            </div>
+            <div style="padding-left: 10px;">
+              <span class="info-label">Anomaly</span>
+              <div class="info-value" id="manAnomaly" style="font-size: 1.1rem; text-align: left; margin-top: 5px;">0%</div>
+            </div>
+          </div>
+          <div id="manRawJson" style="font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; overflow-x: auto; color: var(--text-muted); border: 1px solid var(--border-color); margin-top: 1rem;">
+            JSON response will appear here...
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size: 0.9rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Feature Contributions (SHAP)
+          </h4>
+          <div id="manShapWaterfall" class="shap-waterfall"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let batchAccounts = [];
+  let filteredAccounts = [];
+  let selectedAccountId = null;
+  
+  // Pagination & Sorting States
+  let currentPage = 1;
+  const itemsPerPage = 8;
+  let sortColumn = 'fused_risk_score';
+  let sortDirection = 'desc';
+  let modelFeatureColumns = [];
+  let modelFeatureCatalogPromise = null;
+  let currentDecisionPolicy = {
+    mode: 'balanced',
+    thresholds: { BLOCK: 0.85, CHALLENGE: 0.65, REVIEW: 0.45 }
+  };
+  const API_BASE = window.location.protocol === 'file:'
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin;
+
+  function apiUrl(path) {
+    return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  async function ensureModelFeatureCatalog() {
+    if (modelFeatureColumns.length > 0) {
+      return modelFeatureColumns;
+    }
+
+    if (!modelFeatureCatalogPromise) {
+      modelFeatureCatalogPromise = fetch(apiUrl('/model/info'))
+        .then(async (resp) => {
+          if (!resp.ok) {
+            throw new Error(`Model info request failed (${resp.status})`);
+          }
+          return resp.json();
+        })
+        .then((data) => {
+          modelFeatureColumns = Array.isArray(data.feature_columns) ? data.feature_columns : [];
+          if (data.decision_policy && data.decision_policy.thresholds) {
+            currentDecisionPolicy = data.decision_policy;
+            syncDecisionModeSelect();
+          }
+          if (modelFeatureColumns.length > 0) {
+            const engineEl = document.getElementById('statEngine');
+            if (engineEl) {
+              const modeLabel = currentDecisionPolicy.mode ? `, ${currentDecisionPolicy.mode} policy` : '';
+              engineEl.textContent = `Model: ${data.model_name || 'LightGBM'} (${modelFeatureColumns.length} features${modeLabel})`;
+            }
+          }
+          return modelFeatureColumns;
+        })
+        .catch((err) => {
+          console.warn('Unable to load feature catalog from API:', err);
+          modelFeatureColumns = [];
+          return [];
+        });
+    }
+
+    return modelFeatureCatalogPromise;
+  }
+
+  function parseNumericFeature(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0.0;
+  }
+
+  function buildFullFeaturePayload(source = {}) {
+    const features = {};
+    const knownFeatures = modelFeatureColumns.length > 0
+      ? modelFeatureColumns
+      : Object.keys(source).filter((key) => !['account_id', 'F3924', 'target', 'label', 'Unnamed: 0'].includes(key));
+    const requiredExtras = ['F3889', 'F3891'];
+
+    knownFeatures.forEach((featureName) => {
+      features[featureName] = parseNumericFeature(source[featureName]);
+    });
+
+    requiredExtras.forEach((featureName) => {
+      if (!(featureName in features)) {
+        features[featureName] = parseNumericFeature(source[featureName]);
+      }
+    });
+
+    return features;
+  }
+
+  function getDecisionFromFusedScore(fusedScore) {
+    const thresholds = currentDecisionPolicy.thresholds || {};
+    if (fusedScore >= (thresholds.BLOCK ?? 0.85)) return 'BLOCK';
+    if (fusedScore >= (thresholds.CHALLENGE ?? 0.65)) return 'CHALLENGE';
+    if (fusedScore >= (thresholds.REVIEW ?? 0.45)) return 'REVIEW';
+    return 'APPROVE';
+  }
+
+  function getRiskLevelFromDecision(decision) {
+    switch (decision) {
+      case 'BLOCK': return 'CRITICAL';
+      case 'CHALLENGE': return 'HIGH';
+      case 'REVIEW': return 'MEDIUM';
+      default: return 'LOW';
+    }
+  }
+
+  function syncDecisionModeSelect() {
+    const select = document.getElementById('decisionModeSelect');
+    if (select && currentDecisionPolicy.mode) {
+      select.value = currentDecisionPolicy.mode;
+    }
+    const status = document.getElementById('policyStatus');
+    if (status) {
+      const t = currentDecisionPolicy.thresholds || {};
+      status.textContent = `Current policy: ${currentDecisionPolicy.mode || 'balanced'} (${t.BLOCK ?? 0.85}/${t.CHALLENGE ?? 0.65}/${t.REVIEW ?? 0.45})`;
+    }
+  }
+
+  function refreshBatchDecisions() {
+    batchAccounts = batchAccounts.map(acc => {
+      const updatedDecision = acc.decision_overridden ? acc.decision : getDecisionFromFusedScore(acc.fused_risk_score);
+      return {
+        ...acc,
+        decision: updatedDecision,
+        risk_level: acc.decision_overridden ? acc.risk_level : getRiskLevelFromDecision(updatedDecision)
+      };
+    });
+    applyFilters();
+    if (selectedAccountId) {
+      selectAccount(selectedAccountId);
+    }
+    updateSummaryCounts();
+  }
+
+  function updateSummaryCounts() {
+    const counts = batchAccounts.reduce((acc, row) => {
+      acc[row.decision] = (acc[row.decision] || 0) + 1;
+      return acc;
+    }, { APPROVE: 0, REVIEW: 0, CHALLENGE: 0, BLOCK: 0 });
+    const total = batchAccounts.length;
+    const avgLatency = batchAccounts.length ? batchAccounts.reduce((sum, row) => sum + (row.latency_ms || 0), 0) / batchAccounts.length : 0;
+    document.getElementById('summaryCard').classList.remove('hidden');
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statApproved').textContent = counts.APPROVE || 0;
+    document.getElementById('statReviewed').textContent = counts.REVIEW || 0;
+    document.getElementById('statChallenged').textContent = counts.CHALLENGE || 0;
+    document.getElementById('statBlocked').textContent = counts.BLOCK || 0;
+    document.getElementById('statLatency').textContent = `Batch Latency: ${avgLatency.toFixed(2)}ms`;
+    if (batchAccounts.length > 0) {
+      const modeLabel = currentDecisionPolicy.mode || 'balanced';
+      document.getElementById('statEngine').textContent = `Model: ${batchAccounts[0].model_version} | ${modeLabel}`;
+    }
+  }
+
+  async function applyDecisionPolicy() {
+    const select = document.getElementById('decisionModeSelect');
+    const mode = select ? select.value : 'balanced';
+
+    try {
+      const resp = await fetch(apiUrl('/decision/policy'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      });
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.detail || 'Unable to update decision policy.');
+      }
+
+      const data = await resp.json();
+      currentDecisionPolicy = data;
+      syncDecisionModeSelect();
+      refreshBatchDecisions();
+    } catch (err) {
+      alert(`Policy update failed: ${err.message}`);
+    }
+  }
+
+  async function applyManualOverride() {
+    if (!selectedAccountId) {
+      alert('Select an account first.');
+      return;
+    }
+
+    const decisionEl = document.getElementById('overrideDecisionSelect');
+    const reasonEl = document.getElementById('overrideReasonInput');
+    const decision = decisionEl ? decisionEl.value : 'REVIEW';
+    const reason = reasonEl ? reasonEl.value.trim() : '';
+
+    try {
+      const resp = await fetch(apiUrl('/decision/override'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: selectedAccountId,
+          decision,
+          reason: reason || null
+        })
+      });
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.detail || 'Unable to apply manual override.');
+      }
+
+      const data = await resp.json();
+      const idx = batchAccounts.findIndex(acc => acc.account_id === selectedAccountId);
+      if (idx >= 0) {
+        batchAccounts[idx] = {
+          ...batchAccounts[idx],
+          decision: data.decision,
+          risk_level: getRiskLevelFromDecision(data.decision),
+          decision_overridden: true,
+          original_decision: batchAccounts[idx].decision_overridden ? batchAccounts[idx].original_decision : batchAccounts[idx].decision,
+          override_reason: data.reason
+        };
+      }
+
+      const status = document.getElementById('overrideStatus');
+      if (status) {
+        status.textContent = `Override saved: ${data.decision}${data.reason ? ` | ${data.reason}` : ''}`;
+      }
+
+      refreshBatchDecisions();
+      selectAccount(selectedAccountId);
+    } catch (err) {
+      alert(`Override failed: ${err.message}`);
+    }
+  }
+
+  // DRAG & DROP EVENT LISTENERS
+  const dropZone = document.getElementById('dropZone');
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--primary)';
+      dropZone.style.background = 'rgba(0, 242, 254, 0.05)';
+    }, false);
+  });
+  
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'rgba(0, 242, 254, 0.3)';
+      dropZone.style.background = 'rgba(0, 242, 254, 0.01)';
+    }, false);
+  });
+  
+  dropZone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length > 0) {
+      handleCSVFile(files[0]);
+    }
+  });
+
+  // INITIAL HEALTH CHECK
+  window.addEventListener('DOMContentLoaded', () => {
+    checkEngineHealth();
+    ensureModelFeatureCatalog().catch(() => {});
+    setInterval(checkEngineHealth, 10000);
+  });
+
+  async function checkEngineHealth() {
+    const dot = document.getElementById('systemStatusDot');
+    const text = document.getElementById('systemStatusText');
+    try {
+      const res = await fetch(apiUrl('/health'));
+      if (res.ok) {
+        const data = await res.json();
+        dot.style.backgroundColor = 'var(--color-approve)';
+        dot.style.boxShadow = '0 0 10px var(--color-approve)';
+        text.textContent = 'Engine Online';
+      } else {
+        throw new Error('Health check error status');
+      }
+    } catch (err) {
+      dot.style.backgroundColor = 'var(--color-block)';
+      dot.style.boxShadow = '0 0 10px var(--color-block)';
+      text.textContent = 'Engine Offline';
+    }
+  }
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById(tabId).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+
+  // FILE SELECTOR HANDLING
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+      handleCSVFile(file);
+    }
+  }
+
+  function handleCSVFile(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const text = e.target.result;
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) {
+        alert("Empty or invalid CSV file.");
+        return;
+      }
+      processBatchScoring(parsed);
+    };
+    reader.readAsText(file);
+  }
+
+  // SIMPLE MANUAL CSV PARSER
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const results = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      // Handle split by comma (assuming clean CSV data format for banking features)
+      const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+      const row = {};
+      headers.forEach((h, idx) => {
+        row[h] = values[idx];
+      });
+      results.push(row);
+    }
+    return results;
+  }
+
+  // CONVERT CSV ROWS AND POST TO BATCH ENDPOINT
+  async function processBatchScoring(rows) {
+    await ensureModelFeatureCatalog();
+
+    const accounts = rows.map((row, idx) => {
+      const account_id = row.account_id || `ACC-${10000 + idx}`;
+      return {
+        account_id,
+        features: buildFullFeaturePayload(row)
+      };
+    });
+
+    try {
+      const resp = await fetch(apiUrl('/score/batch'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accounts })
+      });
+
+      if (!resp.ok) {
+        const contentType = resp.headers.get('content-type') || '';
+        let errorMessage = `Batch scoring failed (${resp.status}).`;
+
+        if (contentType.includes('application/json')) {
+          try {
+            const errData = await resp.json();
+            errorMessage = errData.detail || errorMessage;
+          } catch (jsonErr) {
+            errorMessage = `${errorMessage} Unable to parse JSON error response.`;
+          }
+        } else {
+          const errText = await resp.text();
+          if (errText) {
+            errorMessage = errText;
+          }
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const data = await resp.json();
+      
+      // Save accounts and cache response
+      batchAccounts = data.results.map((r, index) => {
+        return {
+          ...r,
+          features: accounts[index].features,
+          decision_overridden: r.decision_overridden || false,
+          original_decision: r.original_decision || null,
+          override_reason: r.override_reason || null
+        };
+      });
+
+      updateSummaryCounts();
+      
+      // Filter and Render
+      applyFilters();
+      
+      // Auto-select first row to display SHAP graph
+      if (batchAccounts.length > 0) {
+        selectAccount(batchAccounts[0].account_id);
+      }
+
+    } catch (err) {
+      alert(`Scoring error: ${err.message}`);
+    }
+  }
+
+  // LOAD STATIC DEMO DATASETS FOR USER CONVENIENCE
+  async function loadDemoDataset(type) {
+    await ensureModelFeatureCatalog();
+    const numRows = type === 'mixed' ? 25 : 10;
+    const list = [];
+    for (let i = 0; i < numRows; i++) {
+      const account_id = `ACC-DEMO-${type.toUpperCase()}-${100 + i}`;
+      let isHighRisk = type === 'mules';
+      if (type === 'mixed') {
+        isHighRisk = Math.random() > 0.6; // 40% high risk
+      }
+
+      const row = { account_id };
+      // Generate realistic indicators
+      row["F115"] = isHighRisk ? (Math.random() * 0.4 + 0.6).toFixed(3) : (Math.random() * 0.2).toFixed(3); // high txn volume
+      row["F321"] = isHighRisk ? (Math.random() * 0.5 + 0.5).toFixed(3) : (Math.random() * 0.15).toFixed(3); // foreign txn
+      row["F527"] = isHighRisk ? (Math.random() * 0.7 + 0.3).toFixed(3) : (Math.random() * 0.1).toFixed(3); // high risk country
+      row["F531"] = isHighRisk ? (Math.random() * 0.3).toFixed(3) : (Math.random() * 0.4 + 0.6).toFixed(3); // KYC verification score (low is bad)
+      row["F670"] = isHighRisk ? (Math.random() * 0.6 + 0.4).toFixed(3) : (Math.random() * 0.2).toFixed(3); // devices used
+      row["F1692"] = isHighRisk ? (Math.random() * 0.8 + 0.2).toFixed(3) : (Math.random() * 0.05).toFixed(3); // IP risk
+      row["F2082"] = isHighRisk ? (Math.random() * 0.4).toFixed(3) : (Math.random() * 0.5 + 0.5).toFixed(3); // login distance (low is bad/anomalous)
+      row["F2122"] = isHighRisk ? (Math.random() * 0.8 + 0.2).toFixed(3) : (Math.random() * 0.1).toFixed(3); // velocity
+      row["F2582"] = isHighRisk ? (Math.random() * 0.9).toFixed(3) : 0; // failed logins
+      row["F2678"] = isHighRisk ? (Math.random() * 0.2).toFixed(3) : (Math.random() * 0.6 + 0.4).toFixed(3); // account age
+      row["F2737"] = isHighRisk ? (Math.random() * 0.7 + 0.3).toFixed(3) : (Math.random() * 0.15).toFixed(3); // amount dev
+      row["F2956"] = isHighRisk ? (Math.random() * 0.6 + 0.3).toFixed(3) : (Math.random() * 0.1).toFixed(3); // cash deposit
+      row["F3043"] = isHighRisk ? (Math.random() * 0.8 + 0.2).toFixed(3) : (Math.random() * 0.05).toFixed(3); // profile match
+      row["F3836"] = isHighRisk ? (Math.random() * 0.9).toFixed(3) : 0;
+      row["F3887"] = (Math.random() * 0.5).toFixed(3);
+      row["F3889"] = (Math.random() * 0.8).toFixed(3);
+      row["F3891"] = (Math.random() * 0.7).toFixed(3);
+      row["F3894"] = (Math.random() * 0.5).toFixed(3);
+      
+      list.push(row);
+    }
+    return processBatchScoring(list);
+  }
+
+  // TABLE FILTERING, SORTING & RENDERING
+  function applyFilters() {
+    const searchVal = document.getElementById('searchInput').value.toLowerCase();
+    const filterVal = document.getElementById('decisionFilter').value;
+
+    filteredAccounts = batchAccounts.filter(acc => {
+      const matchSearch = acc.account_id.toLowerCase().includes(searchVal);
+      const matchFilter = !filterVal || acc.decision === filterVal;
+      return matchSearch && matchFilter;
+    });
+
+    currentPage = 1;
+    sortData();
+  }
+
+  function sortTable(column) {
+    if (sortColumn === column) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = column;
+      sortDirection = 'desc'; // default high to low
+    }
+    sortData();
+  }
+
+  function sortData() {
+    filteredAccounts.sort((a, b) => {
+      let valA = a[sortColumn];
+      let valB = b[sortColumn];
+
+      if (typeof valA === 'string') {
+        return sortDirection === 'asc' 
+          ? valA.localeCompare(valB) 
+          : valB.localeCompare(valA);
+      } else {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+
+    renderTable();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('resultsTableBody');
+    tbody.innerHTML = '';
+
+    if (filteredAccounts.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="empty-state">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            <p>No matching accounts found.</p>
+          </td>
+        </tr>`;
+      
+      document.getElementById('paginationInfo').textContent = 'Showing 0 of 0 accounts';
+      document.getElementById('prevPageBtn').disabled = true;
+      document.getElementById('nextPageBtn').disabled = true;
+      return;
+    }
+
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, filteredAccounts.length);
+    const paginatedItems = filteredAccounts.slice(startIndex, endIndex);
+
+    paginatedItems.forEach(acc => {
+      const tr = document.createElement('tr');
+      if (acc.account_id === selectedAccountId) {
+        tr.classList.add('selected');
+      }
+      tr.onclick = () => selectAccount(acc.account_id);
+
+      let badgeClass = 'badge-approve';
+      if (acc.decision === 'BLOCK') badgeClass = 'badge-block';
+      else if (acc.decision === 'CHALLENGE') badgeClass = 'badge-challenge';
+      else if (acc.decision === 'REVIEW') badgeClass = 'badge-review';
+      if (acc.decision_overridden) badgeClass += ' badge-override';
+
+      tr.innerHTML = `
+        <td style="font-weight: 600;">${acc.account_id}</td>
+        <td>${(acc.risk_score * 100).toFixed(2)}%</td>
+        <td>${(acc.anomaly_score * 100).toFixed(2)}%</td>
+        <td style="font-weight: 700; color: var(--primary);">${(acc.fused_risk_score * 100).toFixed(2)}%</td>
+        <td><span class="badge ${badgeClass}">${acc.decision}${acc.decision_overridden ? ' OVERRIDE' : ''}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Pagination status
+    document.getElementById('paginationInfo').textContent = `Showing ${startIndex + 1}-${endIndex} of ${filteredAccounts.length} accounts`;
+    document.getElementById('prevPageBtn').disabled = currentPage === 1;
+    document.getElementById('nextPageBtn').disabled = endIndex >= filteredAccounts.length;
+  }
+
+  function changePage(direction) {
+    currentPage += direction;
+    renderTable();
+  }
+
+  // SELECT AND FETCH LIVE SHAP FROM BACKEND
+  async function selectAccount(accountId) {
+    selectedAccountId = accountId;
+    
+    // Highlight in table
+    document.querySelectorAll('#resultsTableBody tr').forEach((tr, index) => {
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const acc = filteredAccounts[startIndex + index];
+      if (acc && acc.account_id === accountId) {
+        tr.classList.add('selected');
+      } else {
+        tr.classList.remove('selected');
+      }
+    });
+
+    // Fetch details
+    const account = batchAccounts.find(a => a.account_id === accountId);
+    if (!account) return;
+
+    // Show details panel
+    document.getElementById('shapEmptyState').classList.add('hidden');
+    const panel = document.getElementById('shapDetailsPanel');
+    panel.classList.remove('hidden');
+
+    document.getElementById('explainAccountId').textContent = `ACCOUNT: ${account.account_id}`;
+    document.getElementById('explainFusedScore').textContent = `${(account.fused_risk_score * 100).toFixed(2)}%`;
+    document.getElementById('explainDecision').textContent = account.decision_overridden && account.original_decision
+      ? `${account.decision} (override)`
+      : account.decision;
+    
+    // Color style decision
+    const decEl = document.getElementById('explainDecision');
+    decEl.style.color = getDecisionColor(account.decision);
+
+    document.getElementById('explainSupervised').textContent = `${(account.risk_score * 100).toFixed(2)}%`;
+    document.getElementById('explainAnomaly').textContent = `${(account.anomaly_score * 100).toFixed(2)}%`;
+
+    const overrideStatus = document.getElementById('overrideStatus');
+    if (overrideStatus) {
+      if (account.decision_overridden) {
+        overrideStatus.textContent = `Manual override active. Original decision: ${account.original_decision || 'MODEL'}${account.override_reason ? ` | Reason: ${account.override_reason}` : ''}`;
+      } else {
+        overrideStatus.textContent = 'No manual override applied.';
+      }
+    }
+
+    try {
+      const resp = await fetch(apiUrl(`/explain/${encodeURIComponent(accountId)}`));
+      if (!resp.ok) throw new Error("Explanation API failed.");
+      
+      const data = await resp.json();
+      renderSHAPWaterfall(data.explanations, 'shapWaterfall');
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function getDecisionColor(decision) {
+    switch (decision) {
+      case 'BLOCK': return 'var(--color-block)';
+      case 'CHALLENGE': return 'var(--color-challenge)';
+      case 'REVIEW': return 'var(--color-review)';
+      default: return 'var(--color-approve)';
+    }
+  }
+
+  // RENDER THE CUSTOM SHAP SVG/HTML CHART
+  function renderSHAPWaterfall(explanations, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    if (!explanations || explanations.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">No SHAP explanation details returned.</div>';
+      return;
+    }
+
+    // Find max absolute value to scale bars relative to width (50% is center)
+    const maxVal = Math.max(...explanations.map(x => Math.abs(x.shap_value)), 0.01);
+
+    explanations.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'shap-row';
+
+      const absPercent = Math.min((Math.abs(item.shap_value) / maxVal) * 50, 50); // max 50% width from center
+      const isPos = item.shap_value >= 0;
+      
+      const barStyle = isPos 
+        ? `width: ${absPercent}%;` 
+        : `width: ${absPercent}%; right: 50%;`;
+      
+      const classType = isPos ? 'positive' : 'negative';
+      const sign = isPos ? '+' : '';
+
+      row.innerHTML = `
+        <div class="shap-feature-name" title="${item.feature}">${item.feature}</div>
+        <div class="shap-feature-val">${item.value.toFixed(2)}</div>
+        <div class="shap-bar-container">
+          <div class="shap-center-line"></div>
+          <div class="shap-bar ${classType}" style="${barStyle}"></div>
+        </div>
+        <div class="shap-value-text ${classType}">${sign}${item.shap_value.toFixed(4)}</div>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  // SINGLE TRANSACTION SIMULATOR
+  async function scoreSingleManual() {
+    const account_id = document.getElementById('singleAccountId').value || 'ACC-SIM-789';
+    await ensureModelFeatureCatalog();
+    
+    // Construct features payload from input fields
+    const rawInputs = {};
+    document.querySelectorAll('.form-grid input').forEach(input => {
+      if (input.id !== 'singleAccountId') {
+        const featName = input.id.replace('feat_', '');
+        rawInputs[featName] = input.value;
+      }
+    });
+
+    const features = buildFullFeaturePayload(rawInputs);
+
+    const payload = { account_id, features };
+
+    try {
+      const resp = await fetch(apiUrl('/score'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.detail || 'Scoring endpoint failed.');
+      }
+
+      const data = await resp.json();
+      
+      // Update Manual scoring results display
+      document.getElementById('manualResultCard').classList.remove('hidden');
+      
+      const decEl = document.getElementById('manDecision');
+      decEl.textContent = data.decision;
+      decEl.style.color = getDecisionColor(data.decision);
+
+      document.getElementById('manFused').textContent = `${(data.fused_risk_score * 100).toFixed(2)}%`;
+      document.getElementById('manSupervised').textContent = `${(data.risk_score * 100).toFixed(2)}%`;
+      document.getElementById('manAnomaly').textContent = `${(data.anomaly_score * 100).toFixed(2)}%`;
+      document.getElementById('manRawJson').textContent = JSON.stringify(data, null, 2);
+
+      // Fetch explanations
+      const expResp = await fetch(apiUrl(`/explain/${encodeURIComponent(account_id)}`));
+      if (expResp.ok) {
+        const expData = await expResp.json();
+        renderSHAPWaterfall(expData.explanations, 'manShapWaterfall');
+      }
+
+    } catch (err) {
+      alert(`Simulation Error: ${err.message}`);
+    }
+  }
+</script>
+</body>
+</html>

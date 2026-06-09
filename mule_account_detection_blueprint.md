@@ -515,7 +515,7 @@ Run: [`serving/app.py`](file:///c:/Users/Admin/BOI-Project/serving/app.py)
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/model/info` | Model version, thresholds, performance metrics |
 | `POST` | `/score` | Score a single account (< 100ms) |
-| `POST` | `/score/batch` | Score up to 5000 accounts in one call |
+| `POST` | `/score/batch` | Score up to 200000 accounts in one call |
 
 ### 12.2. Sample API Request
 

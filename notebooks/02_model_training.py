@@ -33,6 +33,7 @@ Training Protocol:
 import os
 import warnings
 import json
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -68,6 +69,8 @@ except ImportError:
 import joblib
 
 warnings.filterwarnings('ignore')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from shared_config import MODEL_REPORTS_DIR, MODELS_DIR, load_engineered_data
 
@@ -226,7 +229,7 @@ xgb_model = xgb.XGBClassifier(
     use_label_encoder   = False,
     tree_method         = 'hist',
     random_state        = RANDOM_STATE,
-    n_jobs              = -1,
+    n_jobs              = 1,
 )
 oof_xgb, auc_xgb, ap_xgb = cross_validate_model(xgb_model, X, y, skf, "XGBoost")
 xgb_model.fit(X, y)
@@ -246,7 +249,7 @@ rf_model = RandomForestClassifier(
     min_samples_leaf= 10,
     max_features    = 'sqrt',
     class_weight    = 'balanced',
-    n_jobs          = -1,
+    n_jobs          = 1,
     random_state    = RANDOM_STATE,
 )
 oof_rf, auc_rf, ap_rf = cross_validate_model(rf_model, X, y, skf, "RandomForest")
@@ -268,7 +271,7 @@ lr_model = LogisticRegression(
     solver       = 'saga',
     class_weight = 'balanced',
     max_iter     = 1000,
-    n_jobs       = -1,
+    n_jobs       = 1,
     random_state = RANDOM_STATE,
 )
 oof_lr, auc_lr, ap_lr = cross_validate_model(lr_model, X_scaled, y, skf, "LogisticRegression")
