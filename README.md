@@ -177,6 +177,66 @@ python scripts/generate_hackathon_word_doc.py
 
 ---
 
+## Future Plans & Advancement
+
+Ideas under consideration for evolving the platform — no fixed schedule, ordered by theme.
+
+### Machine learning & data
+
+- Expand the model zoo with CatBoost, TabNet, and deeper ensemble weighting strategies
+- Boruta and SHAP-stability feature selection on top of mutual-information pre-filtering
+- Graph-based features (PageRank, motif detection, shared-device clusters) when transaction graph data is available
+- TabTransformer or target-encoded categorical handling for non-numeric bank attributes
+- Adversarial validation and periodic retraining on rolling windows
+- Adaptive fusion weights (learned or Bayesian-optimised) instead of fixed 70/30 blend
+- Contextual bandit or branch-level adaptive thresholds tied to recent false-positive rates
+- Platt scaling and probability calibration on holdout scores
+- ECOD / PyOD ensemble layer alongside Isolation Forest
+
+### Model governance & reliability
+
+- Population Stability Index (PSI) monitoring on top features with automated retrain triggers
+- MLflow model registry with versioned artifacts and promotion workflow
+- Airflow (or equivalent) orchestration for scheduled retraining and report generation
+- A/B scoring between model versions before production cutover
+- Champion/challenger evaluation harness with automated holdout gates
+- ONNX export for lighter inference runtimes
+
+### Platform & deployment
+
+- Kubernetes deployment with horizontal scaling and health-checked pods
+- Split `requirements-serve.txt` vs `requirements-train.txt` for lean production images
+- Prometheus metrics, structured logging, and distributed tracing on scoring latency
+- Redis or PostgreSQL persistence for scored accounts, overrides, and audit trails
+- Rate limiting and request-size guards on public API endpoints
+- Multi-environment config (dev / staging / production) with secrets management
+
+### Security & compliance
+
+- JWT or API-key authentication on all scoring and decision endpoints
+- Restricted CORS and TLS termination at the ingress layer
+- Immutable audit log for overrides, policy changes, and model version switches
+- Role-based access for investigators vs administrators
+- Data retention policies and PII masking in exported CSVs
+
+### Investigator experience
+
+- Real-time alert stream and webhook integration for case-management systems
+- Network visualisation for linked accounts and typology clusters
+- Bulk override and case-assignment workflow in the UI
+- Investigator feedback loop (confirm / dismiss) feeding label enrichment for retraining
+- Dashboard for alert volume, tier distribution, and score drift by region or branch
+- Multi-select typology filters and saved filter presets in the results grid
+
+### Integrations & streaming
+
+- Kafka / Flink ingestion for near-real-time scoring on live transaction events
+- Batch scoring API callbacks for asynchronous large-file processing
+- Feast or Redis feature store for low-latency pre-computed aggregates
+- Neo4j or TigerGraph backend for relationship queries and graph typologies
+
+---
+
 ## License
 
 MIT License — see [`LICENSE`](LICENSE) for details.
