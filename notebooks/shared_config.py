@@ -12,6 +12,9 @@ RAW_DATA_CANDIDATES = (
 
 ENGINEERED_DATA_PATH = DATA_DIR / "engineered" / "transactions_engineered.parquet"
 ENGINEERED_DATA_CSV_PATH = DATA_DIR / "engineered" / "transactions_engineered.csv"
+ENGINEERED_HOLDOUT_PATH = DATA_DIR / "engineered" / "transactions_engineered_holdout.parquet"
+ENGINEERED_HOLDOUT_CSV_PATH = DATA_DIR / "engineered" / "transactions_engineered_holdout.csv"
+FEATURE_PIPELINE_PATH = MODELS_DIR / "feature_pipeline.pkl"
 
 
 def resolve_raw_data_path() -> Path:
@@ -44,4 +47,23 @@ def load_engineered_data():
 
     raise FileNotFoundError(
         "No engineered dataset found. Expected parquet or csv under data/engineered."
+    )
+
+
+def load_holdout_data():
+    import pandas as pd
+
+    for candidate in (ENGINEERED_HOLDOUT_PATH, ENGINEERED_HOLDOUT_CSV_PATH):
+        if not candidate.exists():
+            continue
+        if candidate.suffix == ".parquet":
+            try:
+                return pd.read_parquet(candidate)
+            except Exception:
+                continue
+        if candidate.suffix == ".csv":
+            return pd.read_csv(candidate, low_memory=False)
+
+    raise FileNotFoundError(
+        "No holdout dataset found. Run notebooks/01_feature_engineering.py first."
     )

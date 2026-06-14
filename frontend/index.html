@@ -370,6 +370,20 @@
     .badge-challenge { background: rgba(255, 145, 0, 0.15); color: var(--color-challenge); }
     .badge-block { background: rgba(255, 82, 82, 0.15); color: var(--color-block); }
     .badge-override { box-shadow: inset 0 0 0 1px rgba(0, 242, 254, 0.55); }
+    .badge-suspicion-1 { background: rgba(0, 230, 118, 0.12); color: var(--color-approve); }
+    .badge-suspicion-2 { background: rgba(255, 179, 0, 0.15); color: var(--color-review); }
+    .badge-suspicion-3 { background: rgba(255, 145, 0, 0.15); color: var(--color-challenge); }
+    .badge-suspicion-4 { background: rgba(255, 82, 82, 0.15); color: var(--color-block); }
+    .typology-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; max-width: 220px; }
+    .typology-chip {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: rgba(0, 242, 254, 0.12);
+      color: var(--primary);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      white-space: nowrap;
+    }
 
     /* --- PAGINATION --- */
     .pagination {
@@ -691,7 +705,7 @@
         <div class="glass-card">
           <div class="card-title">Scored Transactions Grid</div>
           
-          <div class="table-controls">
+          <div class="table-controls" style="flex-wrap: wrap;">
             <input type="text" id="searchInput" class="search-input" placeholder="Search by Account ID..." oninput="applyFilters()">
             <select id="decisionFilter" class="filter-select" onchange="applyFilters()">
               <option value="">All Decisions</option>
@@ -700,6 +714,21 @@
               <option value="CHALLENGE">Challenge Required</option>
               <option value="BLOCK">Blocked</option>
             </select>
+            <select id="suspicionFilter" class="filter-select" onchange="applyFilters()">
+              <option value="">All Suspicion Levels</option>
+              <option value="4">Level 4 — CRITICAL</option>
+              <option value="3">Level 3 — HIGH</option>
+              <option value="2">Level 2 — MEDIUM</option>
+              <option value="1">Level 1 — LOW</option>
+            </select>
+            <select id="typologyFilter" class="filter-select" onchange="applyFilters()">
+              <option value="">All Typologies</option>
+              <option value="silent_account">Silent Account</option>
+              <option value="large_amount_mover">Large Amount Mover</option>
+              <option value="instant_mule">Instant Mule</option>
+              <option value="aggregator_hub">Aggregator Hub</option>
+            </select>
+            <button class="btn-secondary" onclick="downloadSuspicionListCSV()" id="exportSuspicionBtn" disabled>Download Suspicion List CSV</button>
           </div>
 
           <div class="table-container">
@@ -711,11 +740,13 @@
                   <th onclick="sortTable('anomaly_score')">Anomaly Score</th>
                   <th onclick="sortTable('fused_risk_score')">Fused Score</th>
                   <th onclick="sortTable('decision')">Decision</th>
+                  <th onclick="sortTable('suspicion_level')">Suspicion</th>
+                  <th>Typology Flags</th>
                 </tr>
               </thead>
               <tbody id="resultsTableBody">
                 <tr>
-                  <td colspan="5" class="empty-state">
+                  <td colspan="7" class="empty-state">
                     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                     <p>No transaction batch has been scored yet. Upload a CSV or load a quick demo batch to begin.</p>
                   </td>
@@ -768,6 +799,14 @@
               <div style="margin-top: 0.5rem;">
                 <span class="info-label">Anomaly Score</span>
                 <div class="info-value" id="explainAnomaly">-</div>
+              </div>
+              <div style="margin-top: 0.5rem;">
+                <span class="info-label">Suspicion Level</span>
+                <div class="info-value" id="explainSuspicion">-</div>
+              </div>
+              <div style="margin-top: 0.5rem; grid-column: 1 / -1;">
+                <span class="info-label">Typology Flags</span>
+                <div class="info-value" id="explainTypology" style="font-size: 0.85rem;">-</div>
               </div>
             </div>
 
@@ -1277,6 +1316,7 @@
       
       // Filter and Render
       applyFilters();
+      document.getElementById('exportSuspicionBtn').disabled = batchAccounts.length === 0;
       
       // Auto-select first row to display SHAP graph
       if (batchAccounts.length > 0) {
@@ -1330,15 +1370,74 @@
   function applyFilters() {
     const searchVal = document.getElementById('searchInput').value.toLowerCase();
     const filterVal = document.getElementById('decisionFilter').value;
+    const suspicionVal = document.getElementById('suspicionFilter').value;
+    const typologyVal = document.getElementById('typologyFilter').value;
 
     filteredAccounts = batchAccounts.filter(acc => {
       const matchSearch = acc.account_id.toLowerCase().includes(searchVal);
       const matchFilter = !filterVal || acc.decision === filterVal;
-      return matchSearch && matchFilter;
+      const level = acc.suspicion_level || 1;
+      const matchSuspicion = !suspicionVal || String(level) === suspicionVal;
+      const flags = acc.typology_flags || [];
+      const matchTypology = !typologyVal || flags.includes(typologyVal);
+      return matchSearch && matchFilter && matchSuspicion && matchTypology;
     });
 
     currentPage = 1;
     sortData();
+  }
+
+  function getSuspicionBadgeClass(level) {
+    const n = Number(level) || 1;
+    return `badge-suspicion-${Math.min(4, Math.max(1, n))}`;
+  }
+
+  function formatTypologyChips(flags) {
+    if (!flags || flags.length === 0) {
+      return '<span style="color: var(--text-muted); font-size: 0.75rem;">—</span>';
+    }
+    return `<div class="typology-chips">${flags.map(f => `<span class="typology-chip">${f}</span>`).join('')}</div>`;
+  }
+
+  function downloadSuspicionListCSV() {
+    if (!batchAccounts.length) return;
+
+    const headers = [
+      'account_id', 'supervised_score', 'anomaly_score', 'fused_risk_score',
+      'adjusted_fused_risk_score', 'suspicion_level', 'suspicion_label',
+      'decision', 'typology_flags'
+    ];
+
+    const escapeCsv = (value) => {
+      const str = value == null ? '' : String(value);
+      if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = batchAccounts.map(acc => [
+      acc.account_id,
+      acc.risk_score,
+      acc.anomaly_score,
+      acc.fused_risk_score,
+      acc.adjusted_fused_risk_score != null ? acc.adjusted_fused_risk_score : acc.fused_risk_score,
+      acc.suspicion_level || 1,
+      acc.suspicion_label || 'LOW',
+      acc.decision,
+      (acc.typology_flags || []).join('|')
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCsv).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `suspicion_list_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   function sortTable(column) {
@@ -1375,7 +1474,7 @@
     if (filteredAccounts.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="5" class="empty-state">
+          <td colspan="7" class="empty-state">
             <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
             <p>No matching accounts found.</p>
           </td>
@@ -1404,12 +1503,20 @@
       else if (acc.decision === 'REVIEW') badgeClass = 'badge-review';
       if (acc.decision_overridden) badgeClass += ' badge-override';
 
+      const suspicionLevel = acc.suspicion_level || 1;
+      const suspicionLabel = acc.suspicion_label || 'LOW';
+      const adjustedScore = acc.adjusted_fused_risk_score != null
+        ? acc.adjusted_fused_risk_score
+        : acc.fused_risk_score;
+
       tr.innerHTML = `
         <td style="font-weight: 600;">${acc.account_id}</td>
         <td>${(acc.risk_score * 100).toFixed(2)}%</td>
         <td>${(acc.anomaly_score * 100).toFixed(2)}%</td>
-        <td style="font-weight: 700; color: var(--primary);">${(acc.fused_risk_score * 100).toFixed(2)}%</td>
+        <td style="font-weight: 700; color: var(--primary);" title="Adjusted: ${(adjustedScore * 100).toFixed(2)}%">${(acc.fused_risk_score * 100).toFixed(2)}%</td>
         <td><span class="badge ${badgeClass}">${acc.decision}${acc.decision_overridden ? ' OVERRIDE' : ''}</span></td>
+        <td><span class="badge ${getSuspicionBadgeClass(suspicionLevel)}" title="${suspicionLabel}">L${suspicionLevel}</span></td>
+        <td>${formatTypologyChips(acc.typology_flags)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1461,6 +1568,11 @@
 
     document.getElementById('explainSupervised').textContent = `${(account.risk_score * 100).toFixed(2)}%`;
     document.getElementById('explainAnomaly').textContent = `${(account.anomaly_score * 100).toFixed(2)}%`;
+
+    const suspicionLevel = account.suspicion_level || 1;
+    const suspicionLabel = account.suspicion_label || 'LOW';
+    document.getElementById('explainSuspicion').textContent = `Level ${suspicionLevel} — ${suspicionLabel}`;
+    document.getElementById('explainTypology').innerHTML = formatTypologyChips(account.typology_flags);
 
     const overrideStatus = document.getElementById('overrideStatus');
     if (overrideStatus) {

@@ -36,7 +36,7 @@ try:
     import torch
     import torch.nn as nn
     TORCH_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     TORCH_AVAILABLE = False
     print("[INFO] PyTorch not available. Autoencoder anomaly detection skipped.")
 

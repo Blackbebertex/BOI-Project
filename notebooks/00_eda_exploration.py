@@ -229,6 +229,35 @@ plt.savefig(f"{REPORTS_DIR}/05_top50_target_correlation.png", dpi=150)
 plt.close()
 print(f"  [Saved] {REPORTS_DIR}/05_top50_target_correlation.png")
 
+# ── Section 8: Label Leakage Audit ────────────────────────────────────────────
+print("\n" + "=" * 70)
+print("8. LABEL LEAKAGE AUDIT (|Pearson r| > 0.50 with F3924)")
+print("=" * 70)
+LEAKAGE_CORR_THRESHOLD = 0.50
+leakage_rows = []
+for col in numeric_cols:
+    corr = df[col].corr(df[TARGET_COL])
+    if corr is None or np.isnan(corr):
+        continue
+    if abs(corr) > LEAKAGE_CORR_THRESHOLD:
+        leakage_rows.append({
+            "feature": col,
+            "correlation_with_target": corr,
+            "abs_correlation": abs(corr),
+            "excluded_from_model": True,
+        })
+
+leakage_report = pd.DataFrame(leakage_rows).sort_values(
+    "abs_correlation", ascending=False
+) if leakage_rows else pd.DataFrame(
+    columns=["feature", "correlation_with_target", "abs_correlation", "excluded_from_model"]
+)
+leakage_report.to_csv(f"{REPORTS_DIR}/leakage_audit.csv", index=False)
+print(f"  Features exceeding threshold: {len(leakage_report)}")
+if len(leakage_report) > 0:
+    print(f"  Top leakage candidates:\n{leakage_report.head(10).to_string(index=False)}")
+print(f"  [Saved] {REPORTS_DIR}/leakage_audit.csv")
+
 print("\n" + "=" * 70)
 print("EDA COMPLETE — Review reports in:", REPORTS_DIR)
 print("=" * 70)

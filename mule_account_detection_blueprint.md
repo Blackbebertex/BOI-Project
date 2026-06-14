@@ -152,7 +152,7 @@ Since the features are anonymized (`F1`–`F3923`), we infer feature semantics f
 
 ## 4. Exploratory Data Analysis (EDA) Plan
 
-Run: [`notebooks/00_eda_exploration.py`](file:///c:/Users/Admin/BOI-Project/notebooks/00_eda_exploration.py)
+Run: [`notebooks/00_eda_exploration.py`](notebooks/00_eda_exploration.py)
 
 ### 4.1. Target Variable Analysis
 
@@ -193,7 +193,7 @@ Compute `|Pearson Correlation|` of every numeric feature against `F3924`. This p
 
 ## 5. Feature Engineering Strategy
 
-Run: [`notebooks/01_feature_engineering.py`](file:///c:/Users/Admin/BOI-Project/notebooks/01_feature_engineering.py)
+Run: [`notebooks/01_feature_engineering.py`](notebooks/01_feature_engineering.py)
 
 ### 5.1. Pruning Steps (Applied in Order)
 
@@ -261,13 +261,14 @@ Generated features:
 
 ## 6. Model Selection & Training Protocol
 
-Run: [`notebooks/02_model_training.py`](file:///c:/Users/Admin/BOI-Project/notebooks/02_model_training.py)
+Run: [`notebooks/02_model_training.py`](notebooks/02_model_training.py)
 
 ### 6.1. Model Portfolio
 
 | Model | Library | Class Imbalance Handling | Role |
 | :--- | :--- | :--- | :--- |
-| **LightGBM** | `lightgbm` | `scale_pos_weight` | Primary model; fast + accurate |
+| **XGBoost** | `xgboost` | `scale_pos_weight` | Current production winner (holdout PR-AUC 0.888) |
+| **LightGBM** | `lightgbm` | `scale_pos_weight` | Primary GBDT candidate; Optuna HPO |
 | **XGBoost** | `xgboost` | `scale_pos_weight` | Complementary learner |
 | **Random Forest** | `sklearn` | `class_weight='balanced'` | Diversity via bagging |
 | **Logistic Regression** | `sklearn` | `class_weight='balanced'` | Linear baseline + calibration |
@@ -335,7 +336,7 @@ Sweep: threshold ∈ [0.01, 0.99] step 0.01
 
 ## 7. Anomaly Detection Layer
 
-Run: [`notebooks/03_anomaly_detection.py`](file:///c:/Users/Admin/BOI-Project/notebooks/03_anomaly_detection.py)
+Run: [`notebooks/03_anomaly_detection.py`](notebooks/03_anomaly_detection.py)
 
 ### 7.1. Why Anomaly Detection Alongside Supervised Models?
 
@@ -360,7 +361,7 @@ This way, the model learns what "normal" looks like. At inference time, mule acc
 $$\text{FusedRiskScore} = 0.70 \times P_{\text{supervised}} + 0.30 \times S_{\text{anomaly}}$$
 
 Where:
-- $P_{\text{supervised}}$ = LightGBM mule probability (0–1)
+- $P_{\text{supervised}}$ = production model mule probability from `best_model.pkl` (currently XGBoost)
 - $S_{\text{anomaly}}$ = Isolation Forest anomaly score, inverted and normalized to (0–1)
 
 > [!NOTE]
@@ -370,7 +371,7 @@ Where:
 
 ## 8. Explainability (SHAP)
 
-Run: [`notebooks/04_shap_explainability.py`](file:///c:/Users/Admin/BOI-Project/notebooks/04_shap_explainability.py)
+Run: [`notebooks/04_shap_explainability.py`](notebooks/04_shap_explainability.py)
 
 ### 8.1. Why SHAP?
 
@@ -466,9 +467,9 @@ At optimal threshold (e.g., 0.42):
 | :--- | :--- | :--- |
 | Random classifier | = fraud rate (e.g., 0.005) | Worst possible |
 | Logistic Regression | ~0.15–0.30 | Linear signal capture |
-| XGBoost | ~0.35–0.55 | Strong non-linear |
-| LightGBM (tuned) | ~0.45–0.65 | Primary benchmark |
-| Stacking Ensemble | ~0.50–0.70 | Target: beat LightGBM alone |
+| XGBoost (production) | 0.888 (holdout) | Current auto-selected winner |
+| LightGBM (tuned) | ~0.87 (holdout) | Strong CV baseline |
+| Stacking Ensemble | ~0.85 (holdout) | Meta-learner challenger |
 
 ---
 
@@ -506,16 +507,21 @@ Track weekly:
 
 ## 12. Real-Time Serving Architecture
 
-Run: [`serving/app.py`](file:///c:/Users/Admin/BOI-Project/serving/app.py)
+Run: [`serving/app.py`](serving/app.py)
 
 ### 12.1. API Endpoints
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health` | Liveness probe |
-| `GET` | `/model/info` | Model version, thresholds, performance metrics |
+| `GET` | `/model/info` | Model version, thresholds, feature list, performance metrics |
 | `POST` | `/score` | Score a single account (< 100ms) |
-| `POST` | `/score/batch` | Score up to 200000 accounts in one call |
+| `POST` | `/score/batch` | Score up to 200,000 accounts in one call |
+| `GET` | `/explain/{id}` | SHAP TreeExplainer feature explanation for a scored account |
+| `GET` | `/alerts/suspicious-list` | Filter cached scores by suspicion level / typology |
+| `POST` | `/decision/policy` | Switch decision threshold preset (strict / balanced / loose) |
+| `POST` | `/decision/override` | Apply an investigator manual override |
+| `GET` | `/decision/override/{account_id}` | Retrieve existing override for an account |
 
 ### 12.2. Sample API Request
 
@@ -554,10 +560,13 @@ POST /score
   "risk_score": 0.923100,
   "anomaly_score": 0.781200,
   "fused_risk_score": 0.880270,
+  "adjusted_fused_risk_score": 0.930270,
+  "suspicion_level": 4,
+  "suspicion_label": "CRITICAL",
+  "typology_flags": ["silent_account", "large_amount_mover"],
   "decision": "BLOCK",
-  "risk_level": "CRITICAL",
   "latency_ms": 14.3,
-  "model_version": "LightGBM",
+  "model_version": "XGBoost",
   "scored_at": "2026-06-08T04:30:00Z"
 }
 ```
@@ -569,30 +578,51 @@ POST /score
 ```
 BOI-Project/
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml                    ← CI pipeline (lint, test, LFS check)
+│
 ├── data/
-│   ├── DataSet.csv                   ← Raw input dataset (repo root)
 │   └── engineered/
 │       └── transactions_engineered.parquet
 │
+├── frontend/
+│   └── index.html                    ← Single-page browser UI
+│
 ├── notebooks/
+│   ├── shared_config.py              ← Central path config & data loaders
 │   ├── 00_eda_exploration.py         ← Phase 0: EDA
 │   ├── 01_feature_engineering.py     ← Phase 1: Feature engineering
 │   ├── 02_model_training.py          ← Phase 2: Model training & evaluation
 │   ├── 03_anomaly_detection.py       ← Phase 3: Anomaly detection
 │   └── 04_shap_explainability.py     ← Phase 4: SHAP explainability
 │
+├── docs/
+│   ├── MULE_ML_ENGINEER_REPORT.md
+│   ├── BOI_Mule_Detection_Hackathon_Proposal.docx  ← Generated judge proposal
+│   └── diagrams/                                 ← Architecture PNGs
+├── scripts/
+│   ├── render_diagrams.py
+│   └── generate_hackathon_word_doc.py
 ├── models/
-│   ├── lgbm_final.pkl                ← Trained LightGBM
-│   ├── xgb_final.pkl                 ← Trained XGBoost
-│   ├── rf_final.pkl                  ← Trained Random Forest
-│   ├── lr_final.pkl                  ← Trained Logistic Regression
-│   ├── stacking_meta_learner.pkl     ← Stacking meta-classifier
-│   ├── isolation_forest.pkl          ← Anomaly detector
-│   ├── autoencoder_state.pt          ← PyTorch autoencoder (if available)
-│   ├── robust_scaler_anomaly.pkl     ← Scaler for anomaly models
-│   ├── scaler.pkl                    ← Scaler for logistic regression
-│   ├── lgbm_best_params.json         ← Optuna best hyperparameters
-│   └── best_model_metadata.json      ← Optimal threshold, AUC scores
+│   ├── best_model.pkl                ← Production winner (auto-selected)
+│   ├── feature_pipeline.pkl          ← Serialized FeaturePipeline
+│   ├── typology_thresholds.json      ← TypologyEngine cutoffs
+│   ├── lgbm_final.pkl                ← Model zoo artifacts
+│   ├── xgb_final.pkl
+│   ├── rf_final.pkl, extratrees_final.pkl, decision_tree_final.pkl
+│   ├── lr_final.pkl, mlp_final.pkl
+│   ├── stacking_meta_learner.pkl, stacking_bundle.pkl
+│   ├── isolation_forest.pkl
+│   ├── robust_scaler_anomaly.pkl
+│   ├── scaler.pkl
+│   └── best_model_metadata.json      ← Holdout metrics, thresholds
+├── serving/
+│   ├── app.py
+│   ├── feature_pipeline.py
+│   ├── typology_engine.py
+│   └── stacking_bundle.py
+├── tests/                            ← 33 pytest tests
 │
 ├── reports/
 │   ├── eda/
@@ -624,6 +654,13 @@ BOI-Project/
 ├── serving/
 │   └── app.py                        ← FastAPI model serving microservice
 │
+├── DataSet.csv                       ← Raw 111 MB dataset (Git-LFS tracked)
+├── Dockerfile                        ← Docker build for serving
+├── CONTRIBUTING.md                   ← Contribution guidelines
+├── LICENSE                           ← MIT License
+├── PROJECT_ARCHITECTURE.md           ← System architecture walkthrough
+├── test_score.py                     ← Single-account smoke test
+├── test_batch.py                     ← Batch scoring smoke test
 ├── mule_account_detection_blueprint.md ← This document
 └── requirements.txt                  ← Python dependencies
 ```

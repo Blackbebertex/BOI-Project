@@ -28,13 +28,17 @@ import numpy as np
 import pandas as pd
 import joblib
 
+from serving.feature_pipeline import FeaturePipeline, BANK_KEY_FEATURES
+from serving.typology_engine import TypologyEngine, score_to_suspicion, typology_score_boost
+from serving.stacking_bundle import StackingBundle
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 import random
-app = FastAPI()
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s  %(levelname)s  %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -46,18 +50,70 @@ REPORTS_DIR    = BASE_DIR / "reports"
 # ── Load Model Artifacts at Startup ──────────────────────────────────────────
 logger.info("Loading model artifacts...")
 try:
-    lgbm_model = joblib.load(MODELS_DIR / "lgbm_final.pkl")
+    feature_pipeline = FeaturePipeline.load(MODELS_DIR / "feature_pipeline.pkl")
+    best_model_path = MODELS_DIR / "best_model.pkl"
+    if best_model_path.exists():
+        best_model = joblib.load(best_model_path)
+    else:
+        best_model = joblib.load(MODELS_DIR / "lgbm_final.pkl")
     iso_forest = joblib.load(MODELS_DIR / "isolation_forest.pkl")
     robust_scaler = joblib.load(MODELS_DIR / "robust_scaler_anomaly.pkl")
+    feature_scaler = joblib.load(MODELS_DIR / "scaler.pkl") if (MODELS_DIR / "scaler.pkl").exists() else None
+    typology_engine = TypologyEngine()
     with open(MODELS_DIR / "best_model_metadata.json") as f:
         model_metadata = json.load(f)
-    OPTIMAL_THRESHOLD = model_metadata.get("optimal_threshold", 0.50)
-    logger.info(f"Model loaded. Optimal threshold: {OPTIMAL_THRESHOLD:.3f}")
+    OPTIMAL_THRESHOLD = model_metadata.get(
+        "precision_optimal_threshold",
+        model_metadata.get("optimal_threshold", 0.50),
+    )
+    SCALED_MODEL_NAMES = set(model_metadata.get("scaled_model_names", []))
+    logger.info(
+        "Model loaded: %s  threshold=%.3f",
+        model_metadata.get("best_model", "LightGBM"),
+        OPTIMAL_THRESHOLD,
+    )
 except Exception as e:
     raise RuntimeError(
-        "Missing trained model artifacts. Run notebooks/02_model_training.py "
-        "and notebooks/03_anomaly_detection.py before starting the API."
+        "Missing trained model artifacts. Run notebooks/01_feature_engineering.py, "
+        "notebooks/02_model_training.py, and notebooks/03_anomaly_detection.py "
+        "before starting the API."
     ) from e
+
+_shap_explainer = None
+
+
+def get_shap_explainer():
+    global _shap_explainer
+    if _shap_explainer is None:
+        import shap
+        if hasattr(best_model, "predict_proba") and not isinstance(best_model, StackingBundle):
+            _shap_explainer = shap.TreeExplainer(best_model)
+        elif (MODELS_DIR / "lgbm_final.pkl").exists():
+            _shap_explainer = shap.TreeExplainer(joblib.load(MODELS_DIR / "lgbm_final.pkl"))
+        else:
+            _shap_explainer = shap.TreeExplainer(best_model)
+    return _shap_explainer
+
+
+def predict_supervised(feat_vec: np.ndarray) -> float:
+    """Run the production best model on an aligned feature vector."""
+    if isinstance(best_model, StackingBundle):
+        return float(best_model.predict_proba(feat_vec)[0][1])
+    model_name = model_metadata.get("best_model", "")
+    X = feat_vec
+    if model_name in SCALED_MODEL_NAMES and feature_scaler is not None:
+        X = feature_scaler.transform(feat_vec)
+    return float(best_model.predict_proba(X)[0][1])
+
+
+def predict_supervised_batch(feat_matrix: np.ndarray) -> np.ndarray:
+    if isinstance(best_model, StackingBundle):
+        return best_model.predict_proba(feat_matrix)[:, 1].astype(float)
+    model_name = model_metadata.get("best_model", "")
+    X = feat_matrix
+    if model_name in SCALED_MODEL_NAMES and feature_scaler is not None:
+        X = feature_scaler.transform(feat_matrix)
+    return best_model.predict_proba(X)[:, 1].astype(float)
 
 # ── Feature Order ─────────────────────────────────────────────────────────────
 feature_list_path = REPORTS_DIR / "features" / "selected_feature_list.csv"
@@ -119,21 +175,17 @@ class TransactionFeatures(BaseModel):
         ...,
         description=(
             "Dictionary of feature_name → value. "
-            "Keys must include the bank-specified features: "
+            "Must include the 18 bank-specified features: "
             "F115, F321, F527, F531, F670, F1692, F2082, F2122, "
-            "F2582, F2678, F2737, F2956, F3043, F3836, F3887, F3889, F3891, F3894 "
-            "plus any engineered features produced by the feature pipeline."
+            "F2582, F2678, F2737, F2956, F3043, F3836, F3887, F3889, F3891, F3894. "
+            "Additional raw F* features are optional; engineered features are "
+            "computed server-side by the feature pipeline."
         ),
     )
 
     @validator('features')
     def validate_required_features(cls, features):
-        REQUIRED = [
-            "F115", "F321", "F527", "F531", "F670", "F1692", "F2082", "F2122",
-            "F2582", "F2678", "F2737", "F2956", "F3043", "F3836",
-            "F3887", "F3889", "F3891", "F3894",
-        ]
-        missing = [f for f in REQUIRED if f not in features]
+        missing = [f for f in BANK_KEY_FEATURES if f not in features]
         if missing:
             raise ValueError(f"Missing required features: {missing}")
         return features
@@ -145,6 +197,10 @@ class ScoreResponse(BaseModel):
     risk_score         : float = Field(..., ge=0.0, le=1.0, description="Mule probability [0-1]")
     anomaly_score      : float = Field(..., ge=0.0, le=1.0, description="Isolation Forest anomaly score")
     fused_risk_score   : float = Field(..., ge=0.0, le=1.0, description="Weighted fusion of supervised + anomaly")
+    adjusted_fused_risk_score: float = Field(..., ge=0.0, le=1.0, description="Fused score after typology boost")
+    suspicion_level    : int = Field(..., ge=1, le=4, description="1=LOW .. 4=CRITICAL")
+    suspicion_label    : str = Field(..., description="LOW | MEDIUM | HIGH | CRITICAL")
+    typology_flags     : List[str] = Field(default_factory=list)
     decision           : str   = Field(..., description="BLOCK | CHALLENGE | REVIEW | APPROVE")
     risk_level         : str   = Field(..., description="CRITICAL | HIGH | MEDIUM | LOW")
     original_decision  : Optional[str] = Field(None, description="Model decision before manual override, if any")
@@ -241,16 +297,25 @@ def apply_manual_override(account_id: str, decision: str, reason: Optional[str] 
 
 def build_feature_vector(features: Dict[str, float]) -> pd.DataFrame:
     """
-    Convert incoming feature dictionary to a DataFrame aligned to FEATURE_COLS order.
-    Missing features are filled with 0.0 (imputed as per training pipeline median ~ 0 after scaling).
+    Run the serialized training pipeline on incoming raw/bank-key features.
+    Returns a DataFrame aligned to the model's expected feature columns.
     """
+    return feature_pipeline.transform_from_bank_keys(features)
+
+
+def build_feature_matrix(feature_dicts: List[Dict[str, float]]) -> pd.DataFrame:
+    """Batch transform multiple account feature dicts through the pipeline."""
+    raw_df = pd.DataFrame(feature_dicts)
+    return feature_pipeline.transform(raw_df)
+
+
+def align_to_model_features(feat_frame: pd.DataFrame) -> np.ndarray:
+    """Align engineered features to the training column order for numpy inference."""
     if FEATURE_COLS:
-        data = {col: [features.get(col, 0.0)] for col in FEATURE_COLS}
+        aligned = feat_frame.reindex(columns=FEATURE_COLS, fill_value=0.0)
     else:
-        # Fallback: sort by key name (less reliable, but avoids crash)
-        ordered_keys = sorted(features.keys())
-        data = {col: [features[col]] for col in ordered_keys}
-    return pd.DataFrame(data, dtype=np.float32)
+        aligned = feat_frame
+    return aligned.to_numpy(dtype=np.float32)
 
 
 def score_single(account_id: str, features: Dict[str, float]) -> ScoreResponse:
@@ -258,24 +323,24 @@ def score_single(account_id: str, features: Dict[str, float]) -> ScoreResponse:
     t0 = time.perf_counter()
 
     feat_frame = build_feature_vector(features)
-    feat_vec = feat_frame.to_numpy(dtype=np.float32)
+    feat_vec = align_to_model_features(feat_frame)
 
-    # Supervised probability (LightGBM)
-    supervised_prob = float(lgbm_model.predict_proba(feat_frame)[0][1])
+    supervised_prob = predict_supervised(feat_vec)
 
-    # Anomaly score (Isolation Forest, trained on legitimate accounts)
     feat_scaled = robust_scaler.transform(feat_vec)
-    iso_raw     = iso_forest.decision_function(feat_scaled)[0]
-    # Normalize: decision_function returns [~-0.5, 0.5]; lower = more anomalous
-    # We clip and invert so that higher value = more suspicious
+    iso_raw = iso_forest.decision_function(feat_scaled)[0]
     anomaly_score = float(np.clip(0.5 - iso_raw, 0.0, 1.0))
 
-    # Fused Score
-    W_SUPER  = 0.70
-    W_ANOMAL = 0.30
-    fused    = W_SUPER * supervised_prob + W_ANOMAL * anomaly_score
+    W_SUPER, W_ANOMAL = 0.70, 0.30
+    fused = W_SUPER * supervised_prob + W_ANOMAL * anomaly_score
 
-    model_decision, model_risk_level = make_decision(fused)
+    flags = typology_engine.detect(features)
+    boost = typology_score_boost(flags)
+    adjusted_fused = float(min(1.0, fused + boost))
+
+    thresholds = current_thresholds()
+    suspicion_level, suspicion_label = score_to_suspicion(adjusted_fused, thresholds)
+    model_decision, model_risk_level = make_decision(adjusted_fused, thresholds)
     decision, risk_level = model_decision, model_risk_level
     override = MANUAL_OVERRIDES.get(account_id)
     decision_overridden = False
@@ -284,54 +349,60 @@ def score_single(account_id: str, features: Dict[str, float]) -> ScoreResponse:
         decision = override["decision"]
         decision_overridden = True
         override_reason = override.get("reason")
-        _, risk_level = make_decision(fused, {
-            "BLOCK": 0.85,
-            "CHALLENGE": 0.65,
-            "REVIEW": 0.45,
-        })
         if decision == "BLOCK":
             risk_level = "CRITICAL"
+            suspicion_level, suspicion_label = 4, "CRITICAL"
         elif decision == "CHALLENGE":
             risk_level = "HIGH"
+            suspicion_level, suspicion_label = 3, "HIGH"
         elif decision == "REVIEW":
             risk_level = "MEDIUM"
+            suspicion_level, suspicion_label = 2, "MEDIUM"
         else:
             risk_level = "LOW"
+            suspicion_level, suspicion_label = 1, "LOW"
     latency_ms = (time.perf_counter() - t0) * 1000
 
     logger.info(
         f"Scored account={account_id}  supervised={supervised_prob:.4f}  "
-        f"anomaly={anomaly_score:.4f}  fused={fused:.4f}  "
-        f"decision={decision}  latency={latency_ms:.2f}ms"
+        f"adjusted={adjusted_fused:.4f}  flags={flags}  decision={decision}"
     )
 
-    # Cache features and score details for explanation endpoint
     if len(SCORED_ACCOUNTS_CACHE) >= MAX_CACHE_SIZE:
         first_key = next(iter(SCORED_ACCOUNTS_CACHE))
         SCORED_ACCOUNTS_CACHE.pop(first_key, None)
-    
+
     SCORED_ACCOUNTS_CACHE[account_id] = {
         "features": features,
+        "engineered_frame": feat_frame,
         "supervised_prob": supervised_prob,
         "anomaly_score": anomaly_score,
         "fused": fused,
+        "adjusted_fused": adjusted_fused,
+        "typology_flags": flags,
+        "suspicion_level": suspicion_level,
+        "suspicion_label": suspicion_label,
         "decision": decision,
-        "risk_level": risk_level
+        "risk_level": risk_level,
     }
 
     return ScoreResponse(
-        account_id       = account_id,
-        risk_score       = round(supervised_prob, 6),
-        anomaly_score    = round(anomaly_score, 6),
-        fused_risk_score = round(fused, 6),
-        decision         = decision,
-        risk_level       = risk_level,
-        original_decision = None if not decision_overridden else model_decision,
-        decision_overridden = decision_overridden,
-        override_reason  = override_reason,
-        latency_ms       = round(latency_ms, 2),
-        model_version    = model_metadata.get("best_model", "LightGBM"),
-        scored_at        = datetime.utcnow().isoformat() + "Z",
+        account_id=account_id,
+        risk_score=round(supervised_prob, 6),
+        anomaly_score=round(anomaly_score, 6),
+        fused_risk_score=round(fused, 6),
+        adjusted_fused_risk_score=round(adjusted_fused, 6),
+        suspicion_level=suspicion_level,
+        suspicion_label=suspicion_label,
+        typology_flags=flags,
+        decision=decision,
+        risk_level=risk_level,
+        original_decision=None if not decision_overridden else model_decision,
+        decision_overridden=decision_overridden,
+        override_reason=override_reason,
+        latency_ms=round(latency_ms, 2),
+        model_version=model_metadata.get("best_model", "LightGBM"),
+        scored_at=datetime.utcnow().isoformat() + "Z",
     )
 
 
@@ -350,7 +421,9 @@ def model_info():
         "optimal_threshold"  : OPTIMAL_THRESHOLD,
         "roc_auc"            : model_metadata.get("best_roc_auc"),
         "pr_auc"             : model_metadata.get("best_pr_auc"),
-        "optimal_f1"         : model_metadata.get("optimal_f1"),
+        "precision_optimal_threshold": model_metadata.get("precision_optimal_threshold"),
+        "holdout_precision": model_metadata.get("holdout_precision_at_optimal"),
+        "holdout_recall": model_metadata.get("holdout_recall_at_optimal"),
         "n_features"         : len(FEATURE_COLS),
         "feature_columns"    : FEATURE_COLS,
         "decision_policy"    : {
@@ -413,75 +486,47 @@ def get_manual_override(account_id: str):
 
 @app.get("/explain/{id}", tags=["Explain"])
 def explain(id: str):
-    """Return SHAP explanation for a given transaction ID."""
+    """Return TreeExplainer SHAP values for a scored account."""
     if id not in SCORED_ACCOUNTS_CACHE:
-        # Fallback if not found in cache (generate mock values for standard required features)
-        features = {
-            "F115": 0.1, "F321": 0.2, "F527": 0.3, "F531": 0.4, "F670": 0.5,
-            "F1692": 0.6, "F2082": 0.7, "F2122": 0.8, "F2582": 0.9, "F2678": 1.0,
-            "F2737": 1.1, "F2956": 1.2, "F3043": 1.3, "F3836": 1.4, "F3887": 1.5,
-            "F3889": 1.6, "F3891": 1.7, "F3894": 1.8
+        raise HTTPException(
+            status_code=404,
+            detail="Account not found in cache. Score the account via POST /score first.",
+        )
+
+    cached = SCORED_ACCOUNTS_CACHE[id]
+    fused = cached.get("adjusted_fused", cached.get("fused", 0.0))
+    feat_frame = cached.get("engineered_frame")
+    if feat_frame is None:
+        feat_frame = build_feature_vector(cached["features"])
+
+    explainer = get_shap_explainer()
+    feat_for_shap = feat_frame.reindex(columns=FEATURE_COLS, fill_value=0.0) if FEATURE_COLS else feat_frame
+    shap_output = explainer.shap_values(feat_for_shap)
+
+    if isinstance(shap_output, list):
+        shap_vals = shap_output[1][0]
+        base_value = float(explainer.expected_value[1])
+    else:
+        shap_vals = shap_output[0]
+        ev = explainer.expected_value
+        base_value = float(ev[1] if hasattr(ev, "__len__") and len(ev) > 1 else ev)
+
+    feature_names = list(feat_for_shap.columns)
+    shap_explanations = [
+        {
+            "feature": name,
+            "value": float(feat_for_shap.iloc[0][name]),
+            "shap_value": round(float(shap_vals[i]), 5),
         }
-        fused = 0.5
-    else:
-        cached = SCORED_ACCOUNTS_CACHE[id]
-        features = cached["features"]
-        fused = cached["fused"]
-
-    # Directional risk mapping (1: higher value = higher risk, -1: higher value = lower risk)
-    # Designed to match logical domain features for banking fraud detection
-    directions = {
-        "F115": 1.0, "F321": 1.0, "F527": 1.0, "F531": -1.0, "F670": 1.0,
-        "F1692": 1.0, "F2082": -1.0, "F2122": 1.0, "F2582": 1.0, "F2678": -1.0,
-        "F2737": 1.0, "F2956": 1.0, "F3043": 1.0, "F3836": 1.0, "F3887": -1.0,
-        "F3889": 1.0, "F3891": 1.0, "F3894": 1.0
-    }
-    
-    # Establish a default baseline (mean/median representation)
-    baselines = {k: 0.5 for k in features.keys()}
-    
-    contributions = []
-    total_raw_contrib = 0.0
-    
-    for feat_name, val in features.items():
-        base = baselines.get(feat_name, 0.5)
-        direction = directions.get(feat_name, 1.0)
-        # Raw contribution represents distance from baseline times direction of risk
-        contrib = (val - base) * direction
-        contributions.append({
-            "feature": feat_name,
-            "value": float(val),
-            "raw_contrib": contrib
-        })
-        total_raw_contrib += contrib
-
-    # Target sum is the difference between final score and expected baseline (e.g. 0.3)
-    base_value = 0.30
-    target_sum = fused - base_value
-    
-    # Normalize contributions to match fused score delta
-    shap_explanations = []
-    if abs(total_raw_contrib) > 0.0001:
-        scale = target_sum / total_raw_contrib
-    else:
-        scale = 0.0
-        
-    for item in contributions:
-        shap_val = item["raw_contrib"] * scale
-        shap_explanations.append({
-            "feature": item["feature"],
-            "value": item["value"],
-            "shap_value": round(shap_val, 5)
-        })
-        
-    # Sort descending by absolute impact
+        for i, name in enumerate(feature_names)
+    ]
     shap_explanations.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
-    
+
     return {
         "account_id": id,
-        "base_value": base_value,
+        "base_value": round(base_value, 5),
         "fused_risk_score": fused,
-        "explanations": shap_explanations[:10]  # Return top 10 contributing features
+        "explanations": shap_explanations[:10],
     }
 
 
@@ -527,20 +572,12 @@ def score_batch(request: BatchScoreRequest):
         )
 
     # Vectorized inference for massive batch scaling (up to 2 lakh entries)
-    if FEATURE_COLS:
-        feat_matrix = np.zeros((n, len(FEATURE_COLS)), dtype=np.float32)
-        for i, acc in enumerate(request.accounts):
-            for j, col in enumerate(FEATURE_COLS):
-                feat_matrix[i, j] = acc.features.get(col, 0.0)
-    else:
-        sample_keys = sorted(list(request.accounts[0].features.keys()))
-        feat_matrix = np.zeros((n, len(sample_keys)), dtype=np.float32)
-        for i, acc in enumerate(request.accounts):
-            for j, col in enumerate(sample_keys):
-                feat_matrix[i, j] = acc.features.get(col, 0.0)
+    feature_dicts = [acc.features for acc in request.accounts]
+    feat_frame = build_feature_matrix(feature_dicts)
+    feat_matrix = align_to_model_features(feat_frame)
 
     # Batch prediction
-    supervised_probs = lgbm_model.predict_proba(feat_matrix)[:, 1].astype(float)
+    supervised_probs = predict_supervised_batch(feat_matrix)
     
     # Batch anomaly scoring
     feat_scaled = robust_scaler.transform(feat_matrix)
@@ -567,7 +604,12 @@ def score_batch(request: BatchScoreRequest):
         fused = float(fused_scores[i])
         supervised = float(supervised_probs[i])
         anomaly = float(anomaly_scores[i])
-        model_decision, model_risk_level = make_decision(fused)
+        flags = typology_engine.detect(acc.features)
+        boost = typology_score_boost(flags)
+        adjusted_fused = float(min(1.0, fused + boost))
+        thresholds = current_thresholds()
+        suspicion_level, suspicion_label = score_to_suspicion(adjusted_fused, thresholds)
+        model_decision, model_risk_level = make_decision(adjusted_fused, thresholds)
         decision, risk_level = model_decision, model_risk_level
         override = MANUAL_OVERRIDES.get(acc.account_id)
         decision_overridden = False
@@ -595,29 +637,38 @@ def score_batch(request: BatchScoreRequest):
             approved_count += 1
             
         res_obj = ScoreResponse(
-            account_id       = acc.account_id,
-            risk_score       = round(supervised, 6),
-            anomaly_score    = round(anomaly, 6),
-            fused_risk_score = round(fused, 6),
-            decision         = decision,
-            risk_level       = risk_level,
-            original_decision = None if not decision_overridden else model_decision,
-            decision_overridden = decision_overridden,
-            override_reason  = override_reason,
-            latency_ms       = 0.0, 
-            model_version    = model_version,
-            scored_at        = scored_time
+            account_id=acc.account_id,
+            risk_score=round(supervised, 6),
+            anomaly_score=round(anomaly, 6),
+            fused_risk_score=round(fused, 6),
+            adjusted_fused_risk_score=round(adjusted_fused, 6),
+            suspicion_level=suspicion_level,
+            suspicion_label=suspicion_label,
+            typology_flags=flags,
+            decision=decision,
+            risk_level=risk_level,
+            original_decision=None if not decision_overridden else model_decision,
+            decision_overridden=decision_overridden,
+            override_reason=override_reason,
+            latency_ms=0.0,
+            model_version=model_version,
+            scored_at=scored_time,
         )
         results.append(res_obj)
         
         # Cache transaction
         SCORED_ACCOUNTS_CACHE[acc.account_id] = {
             "features": acc.features,
+            "engineered_frame": feat_frame.iloc[[i]],
             "supervised_prob": supervised,
             "anomaly_score": anomaly,
             "fused": fused,
+            "adjusted_fused": adjusted_fused,
+            "typology_flags": flags,
+            "suspicion_level": suspicion_level,
+            "suspicion_label": suspicion_label,
             "decision": decision,
-            "risk_level": risk_level
+            "risk_level": risk_level,
         }
         
     # Cap cache memory usage
@@ -640,6 +691,38 @@ def score_batch(request: BatchScoreRequest):
         approved         = approved_count,
         batch_latency_ms = round(batch_latency_ms, 2),
     )
+
+
+@app.get("/alerts/suspicious-list", tags=["Alerts"])
+def suspicious_list(
+    min_level: int = 2,
+    typology: Optional[str] = None,
+    limit: int = 500,
+):
+    """Return cached accounts filtered by suspicion level and optional typology flag."""
+    min_level = max(1, min(4, min_level))
+    limit = max(1, min(limit, MAX_CACHE_SIZE))
+    rows = []
+    for account_id, cached in SCORED_ACCOUNTS_CACHE.items():
+        level = cached.get("suspicion_level", 1)
+        flags = cached.get("typology_flags", [])
+        if level < min_level:
+            continue
+        if typology and typology not in flags:
+            continue
+        rows.append({
+            "account_id": account_id,
+            "risk_score": cached.get("supervised_prob"),
+            "anomaly_score": cached.get("anomaly_score"),
+            "fused_risk_score": cached.get("fused"),
+            "adjusted_fused_risk_score": cached.get("adjusted_fused"),
+            "suspicion_level": level,
+            "suspicion_label": cached.get("suspicion_label"),
+            "decision": cached.get("decision"),
+            "typology_flags": flags,
+        })
+    rows.sort(key=lambda r: (r["suspicion_level"], r["adjusted_fused_risk_score"]), reverse=True)
+    return {"total": len(rows[:limit]), "accounts": rows[:limit]}
 
 
 # ── Static Files Mounting ─────────────────────────────────────────────────────
