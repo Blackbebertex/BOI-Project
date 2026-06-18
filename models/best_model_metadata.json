@@ -1,0 +1,21 @@
+{
+  "best_model": "XGBoost",
+  "best_model_type": "single",
+  "optimal_threshold": 0.18000000000000002,
+  "precision_optimal_threshold": 0.09999999999999999,
+  "best_roc_auc": 0.9580320512820514,
+  "best_pr_auc": 0.8334964764855579,
+  "optimal_f1": 0.784,
+  "holdout_roc_auc": 0.9985771793448084,
+  "holdout_pr_auc": 0.8879803203332615,
+  "holdout_precision_at_optimal": 0.7777777777777778,
+  "holdout_recall_at_optimal": 0.875,
+  "recall_at_fpr_1pct": 1.0,
+  "holdout_n_samples": 1817,
+  "holdout_n_positives": 16,
+  "model_zoo_comparison": "reports/models/model_comparison.csv",
+  "scaled_model_names": [
+    "MLP",
+    "LogisticRegression"
+  ]
+}
